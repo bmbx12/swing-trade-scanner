@@ -2,6 +2,7 @@
 import time
 from datetime import datetime
 from fmp_client import FMPClient
+from stock_universe import get_stocks_by_sector
 from scoring import (
     calculate_ath,
     calculate_pct_below_ath,
@@ -37,54 +38,86 @@ class Scanner:
         return winning
 
     def get_candidates(self, sectors: list[dict]) -> list[dict]:
-        """Step 2: Screen stocks in winning sectors."""
-        seen = set()
+        """Step 2: Get stocks from embedded universe in winning sectors."""
         candidates = []
         for sector_data in sectors:
-            sector_name = sector_data["sector"]
-            stocks = self.client.screen_stocks(
-                sector=sector_name,
-                market_cap_min=self.config["market_cap_min"],
-                volume_min=self.config["volume_min"],
+            fmp_sector_name = sector_data["sector"]
+            sector_perf = float(
+                sector_data["changesPercentage"].replace("%", "")
             )
+            stocks = get_stocks_by_sector(fmp_sector_name)
             for stock in stocks:
-                symbol = stock["symbol"]
-                if symbol not in seen:
-                    seen.add(symbol)
-                    stock["sector_performance"] = float(
-                        sector_data["changesPercentage"].replace("%", "")
-                    )
-                    candidates.append(stock)
+                candidates.append({
+                    "symbol": stock["symbol"],
+                    "name": stock["name"],
+                    "sector": fmp_sector_name,
+                    "sector_performance": sector_perf,
+                })
         return candidates
 
-    def enrich_candidate(self, candidate: dict, sector_perf: float) -> dict:
-        """Step 3: Add quote data, ATH, and score to a candidate."""
-        symbol = candidate["symbol"]
+    def quick_filter(self, candidate: dict) -> dict | None:
+        """Step 3a: Quick filter using quote data (52-week high as ATH proxy).
 
+        Returns enriched candidate if it passes initial screen, None otherwise.
+        This avoids expensive historical API calls for stocks that clearly
+        don't meet criteria.
+        """
+        symbol = candidate["symbol"]
         quote = self.client.get_quote(symbol)
+
+        price = quote.get("price", 0)
+        year_high = quote.get("yearHigh", 0)
+
+        if price == 0 or year_high == 0:
+            return None
+
+        # Quick check: % below 52-week high as ATH proxy
+        pct_below_52w = ((year_high - price) / year_high) * 100
+
+        # Only fetch historical if stock is roughly in our ATH range
+        # Use wider bounds (10%-60%) since 52-week high != ATH
+        if pct_below_52w < (self.config["ath_min"] - 5) or pct_below_52w > (self.config["ath_max"] + 10):
+            return None
+
+        return {
+            **candidate,
+            "price": price,
+            "name": quote.get("name", candidate.get("name", "")),
+            "yearHigh": year_high,
+            "yearLow": quote.get("yearLow", 0),
+            "volume": quote.get("volume", 0),
+            "avgVolume": quote.get("averageVolume", 0),
+        }
+
+    def enrich_candidate(self, candidate: dict) -> dict | None:
+        """Step 3b: Add historical ATH data and score."""
+        symbol = candidate["symbol"]
 
         historical = self.client.get_historical_prices(symbol, timeseries=365)
         hist_data = historical.get("historical", [])
         ath = calculate_ath(hist_data)
 
-        if ath is None or quote.get("price", 0) == 0:
+        if ath is None:
+            # Fallback to 52-week high if no historical data
+            ath = candidate.get("yearHigh", 0)
+        if ath == 0:
             return None
 
-        price = quote["price"]
+        price = candidate["price"]
         pct_below = calculate_pct_below_ath(price, ath)
         target = ath
         upside = calculate_upside(price, target)
 
         enriched = {
             "symbol": symbol,
-            "name": quote.get("name", candidate.get("companyName", "")),
+            "name": candidate.get("name", ""),
             "sector": candidate.get("sector", ""),
-            "sector_performance": sector_perf,
+            "sector_performance": candidate.get("sector_performance", 0),
             "price": price,
-            "yearHigh": quote.get("yearHigh", 0),
-            "yearLow": quote.get("yearLow", 0),
-            "volume": quote.get("volume", 0),
-            "avgVolume": quote.get("avgVolume", 0),
+            "yearHigh": candidate.get("yearHigh", 0),
+            "yearLow": candidate.get("yearLow", 0),
+            "volume": candidate.get("volume", 0),
+            "avgVolume": candidate.get("avgVolume", 0),
             "ath": ath,
             "pct_below_ath": round(pct_below, 1),
             "target_price": round(target, 2),
@@ -95,29 +128,53 @@ class Scanner:
         return enriched
 
     def run_scan(self, progress_callback=None) -> dict:
-        """Run the full 4-step screening pipeline."""
+        """Run the full screening pipeline.
+
+        Pipeline:
+        1. Get sector performance -> find winning sectors
+        2. Get candidates from S&P 500 universe in winning sectors
+        3a. Quick filter: get quote, check 52-week range
+        3b. Deep enrich: get historical prices for ATH, score
+        4. Rank and return top N
+        """
         start_time = time.time()
 
+        # Step 1: Sector performance
         if progress_callback:
             progress_callback("Analyzing sector performance...")
         winning_sectors = self.get_winning_sectors()
 
+        # Step 2: Get candidates from universe
         if progress_callback:
             progress_callback(
-                f"Screening stocks in {len(winning_sectors)} outperforming sectors..."
+                f"Found {len(winning_sectors)} outperforming sectors, loading candidates..."
             )
         candidates = self.get_candidates(winning_sectors)
 
-        enriched = []
+        # Step 3a: Quick filter with quotes
+        quick_passed = []
         total = len(candidates)
         for i, candidate in enumerate(candidates):
-            if progress_callback and i % 10 == 0:
+            if progress_callback and i % 15 == 0:
                 progress_callback(
-                    f"Analyzing stock {i+1}/{total}: {candidate['symbol']}..."
+                    f"Screening {i+1}/{total}: {candidate['symbol']}..."
                 )
             try:
-                sector_perf = candidate.get("sector_performance", 0)
-                result = self.enrich_candidate(candidate, sector_perf)
+                result = self.quick_filter(candidate)
+                if result:
+                    quick_passed.append(result)
+            except Exception:
+                continue
+
+        # Step 3b: Deep enrich with historical data
+        enriched = []
+        for i, candidate in enumerate(quick_passed):
+            if progress_callback:
+                progress_callback(
+                    f"Deep analysis {i+1}/{len(quick_passed)}: {candidate['symbol']}..."
+                )
+            try:
+                result = self.enrich_candidate(candidate)
                 if result and passes_filters(
                     result,
                     ath_min=self.config["ath_min"],
@@ -127,6 +184,7 @@ class Scanner:
             except Exception:
                 continue
 
+        # Step 4: Rank
         if progress_callback:
             progress_callback("Ranking candidates...")
         ranked = rank_stocks(enriched, limit=self.config["top_n"])
@@ -147,6 +205,7 @@ class Scanner:
                     for s in winning_sectors
                 ],
                 "total_candidates": len(candidates),
+                "quick_filtered": len(quick_passed),
                 "passed_filters": len(enriched),
                 "elapsed_seconds": elapsed,
             },

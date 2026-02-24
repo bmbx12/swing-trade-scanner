@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 from scanner import Scanner
 
 
@@ -35,43 +35,60 @@ class TestGetWinningSectors:
 
 
 class TestGetCandidates:
-    def test_screens_each_winning_sector(self, scanner, mock_client):
-        mock_client.screen_stocks.return_value = [
-            {"symbol": "AAPL", "companyName": "Apple", "sector": "Technology"}
+    @patch("scanner.get_stocks_by_sector")
+    def test_gets_stocks_from_universe(self, mock_get_stocks, scanner):
+        mock_get_stocks.return_value = [
+            {"symbol": "AAPL", "name": "Apple", "sector": "Information Technology"}
         ]
-        candidates = scanner.get_candidates(
-            [{"sector": "Technology", "changesPercentage": "2.35"},
-             {"sector": "Energy", "changesPercentage": "1.10"}]
+        result = scanner.get_candidates(
+            [{"sector": "Technology", "changesPercentage": "2.35"}]
         )
-        assert mock_client.screen_stocks.call_count == 2
+        mock_get_stocks.assert_called_once_with("Technology")
+        assert len(result) == 1
+        assert result[0]["symbol"] == "AAPL"
+        assert result[0]["sector_performance"] == 2.35
 
-    def test_deduplicates_stocks(self, scanner, mock_client):
-        mock_client.screen_stocks.return_value = [
-            {"symbol": "AAPL", "companyName": "Apple", "sector": "Technology"}
-        ]
-        candidates = scanner.get_candidates(
-            [{"sector": "Technology", "changesPercentage": "2.35"},
-             {"sector": "Technology", "changesPercentage": "2.35"}]
-        )
-        symbols = [c["symbol"] for c in candidates]
-        assert symbols.count("AAPL") == 1
+
+class TestQuickFilter:
+    def test_passes_stock_in_range(self, scanner, mock_client):
+        mock_client.get_quote.return_value = {
+            "symbol": "AAPL", "price": 150.0, "yearHigh": 200.0,
+            "yearLow": 120.0, "volume": 5000000, "averageVolume": 4000000,
+            "name": "Apple Inc",
+        }
+        candidate = {"symbol": "AAPL", "name": "Apple", "sector": "Technology",
+                     "sector_performance": 2.35}
+        result = scanner.quick_filter(candidate)
+        assert result is not None
+        assert result["price"] == 150.0
+
+    def test_rejects_stock_near_high(self, scanner, mock_client):
+        mock_client.get_quote.return_value = {
+            "symbol": "AAPL", "price": 195.0, "yearHigh": 200.0,
+            "yearLow": 120.0, "volume": 5000000, "averageVolume": 4000000,
+            "name": "Apple Inc",
+        }
+        candidate = {"symbol": "AAPL", "name": "Apple", "sector": "Technology",
+                     "sector_performance": 2.35}
+        result = scanner.quick_filter(candidate)
+        assert result is None
 
 
 class TestEnrichCandidate:
-    def test_adds_ath_and_upside(self, scanner, mock_client):
-        mock_client.get_quote.return_value = {
-            "symbol": "AAPL", "price": 150.0, "yearHigh": 200.0,
-            "yearLow": 120.0, "volume": 5000000, "avgVolume": 4000000,
-            "name": "Apple Inc",
-        }
+    def test_adds_ath_and_score(self, scanner, mock_client):
         mock_client.get_historical_prices.return_value = {
             "symbol": "AAPL",
             "historical": [
                 {"high": 180.0}, {"high": 220.0}, {"high": 190.0}
             ]
         }
-        candidate = {"symbol": "AAPL", "sector": "Technology"}
-        enriched = scanner.enrich_candidate(candidate, sector_perf=2.35)
+        candidate = {
+            "symbol": "AAPL", "name": "Apple Inc", "sector": "Technology",
+            "sector_performance": 2.35, "price": 150.0,
+            "yearHigh": 200.0, "yearLow": 120.0,
+            "volume": 5000000, "avgVolume": 4000000,
+        }
+        enriched = scanner.enrich_candidate(candidate)
         assert enriched["ath"] == 220.0
         assert enriched["pct_below_ath"] == pytest.approx(31.8, abs=0.1)
         assert "upside_pct" in enriched
@@ -79,26 +96,23 @@ class TestEnrichCandidate:
 
 
 class TestRunScan:
-    def test_full_pipeline_returns_ranked_results(self, scanner, mock_client):
-        mock_client.screen_stocks.return_value = [
-            {"symbol": "AAPL", "sector": "Technology"},
-            {"symbol": "MSFT", "sector": "Technology"},
+    @patch("scanner.get_stocks_by_sector")
+    def test_full_pipeline_returns_results(self, mock_get_stocks, scanner, mock_client):
+        mock_get_stocks.return_value = [
+            {"symbol": "AAPL", "name": "Apple", "sector": "Information Technology"},
         ]
-        mock_client.get_quote.side_effect = [
-            {"symbol": "AAPL", "price": 150.0, "yearHigh": 200.0,
-             "yearLow": 120.0, "volume": 5000000, "avgVolume": 4000000,
-             "name": "Apple Inc"},
-            {"symbol": "MSFT", "price": 350.0, "yearHigh": 430.0,
-             "yearLow": 300.0, "volume": 3000000, "avgVolume": 2500000,
-             "name": "Microsoft Corp"},
-        ]
-        mock_client.get_historical_prices.side_effect = [
-            {"symbol": "AAPL", "historical": [{"high": 220.0}]},
-            {"symbol": "MSFT", "historical": [{"high": 450.0}]},
-        ]
+        mock_client.get_quote.return_value = {
+            "symbol": "AAPL", "price": 150.0, "yearHigh": 200.0,
+            "yearLow": 120.0, "volume": 5000000, "averageVolume": 4000000,
+            "name": "Apple Inc",
+        }
+        mock_client.get_historical_prices.return_value = {
+            "symbol": "AAPL",
+            "historical": [{"high": 220.0}],
+        }
 
         results = scanner.run_scan()
         assert isinstance(results, dict)
         assert "stocks" in results
         assert "scan_metadata" in results
-        assert results["scan_metadata"]["total_candidates"] >= 0
+        assert results["scan_metadata"]["total_candidates"] >= 1
