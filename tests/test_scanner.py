@@ -6,10 +6,12 @@ from scanner import Scanner
 @pytest.fixture
 def mock_client():
     client = Mock()
+    client.calls_made = 0
+    client.call_budget = 200
     client.get_sector_performance.return_value = [
         {"sector": "Technology", "changesPercentage": "2.35"},
         {"sector": "Energy", "changesPercentage": "1.10"},
-        {"sector": "Healthcare", "changesPercentage": "-0.50"},
+        {"sector": "Healthcare", "changesPercentage": "0.50"},
         {"sector": "Utilities", "changesPercentage": "-1.20"},
     ]
     return client
@@ -21,12 +23,22 @@ def scanner(mock_client):
 
 
 class TestGetWinningSectors:
-    def test_returns_positive_sectors(self, scanner):
+    def test_returns_positive_sectors_only(self, scanner):
         sectors = scanner.get_winning_sectors()
         sector_names = [s["sector"] for s in sectors]
-        assert "Technology" in sector_names
-        assert "Energy" in sector_names
-        assert "Healthcare" not in sector_names
+        assert "Utilities" not in sector_names
+
+    def test_limits_to_max_3_sectors(self, scanner, mock_client):
+        mock_client.get_sector_performance.return_value = [
+            {"sector": "Technology", "changesPercentage": "3.0"},
+            {"sector": "Energy", "changesPercentage": "2.0"},
+            {"sector": "Healthcare", "changesPercentage": "1.5"},
+            {"sector": "Industrials", "changesPercentage": "1.0"},
+            {"sector": "Utilities", "changesPercentage": "0.5"},
+        ]
+        sectors = scanner.get_winning_sectors()
+        assert len(sectors) == 3
+        assert sectors[0]["sector"] == "Technology"
 
     def test_sorts_by_performance_desc(self, scanner):
         sectors = scanner.get_winning_sectors()
@@ -50,7 +62,7 @@ class TestGetCandidates:
 
 
 class TestQuickFilter:
-    def test_passes_stock_in_range(self, scanner, mock_client):
+    def test_passes_stock_below_52w_high(self, scanner, mock_client):
         mock_client.get_quote.return_value = {
             "symbol": "AAPL", "price": 150.0, "yearHigh": 200.0,
             "yearLow": 120.0, "volume": 5000000, "averageVolume": 4000000,
@@ -62,13 +74,27 @@ class TestQuickFilter:
         assert result is not None
         assert result["price"] == 150.0
 
-    def test_rejects_stock_near_high(self, scanner, mock_client):
+    def test_passes_stock_near_52w_high(self, scanner, mock_client):
+        """Stocks near their 52-week high should still pass because their
+        5-year ATH might be much higher."""
         mock_client.get_quote.return_value = {
             "symbol": "AAPL", "price": 195.0, "yearHigh": 200.0,
             "yearLow": 120.0, "volume": 5000000, "averageVolume": 4000000,
             "name": "Apple Inc",
         }
         candidate = {"symbol": "AAPL", "name": "Apple", "sector": "Technology",
+                     "sector_performance": 2.35}
+        result = scanner.quick_filter(candidate)
+        assert result is not None
+
+    def test_rejects_extremely_depressed_stock(self, scanner, mock_client):
+        """Only reject if WAY below range (>80% below 52-week high)."""
+        mock_client.get_quote.return_value = {
+            "symbol": "FAIL", "price": 10.0, "yearHigh": 200.0,
+            "yearLow": 5.0, "volume": 5000000, "averageVolume": 4000000,
+            "name": "Failed Corp",
+        }
+        candidate = {"symbol": "FAIL", "name": "Failed", "sector": "Technology",
                      "sector_performance": 2.35}
         result = scanner.quick_filter(candidate)
         assert result is None
@@ -116,3 +142,4 @@ class TestRunScan:
         assert "stocks" in results
         assert "scan_metadata" in results
         assert results["scan_metadata"]["total_candidates"] >= 1
+        assert "api_calls_used" in results["scan_metadata"]

@@ -55,6 +55,8 @@ def client():
 
 def _setup_mock_fmp(mock_fmp):
     """Configure mock FMP client with test data."""
+    mock_fmp.calls_made = 0
+    mock_fmp.call_budget = 200
     mock_fmp.get_sector_performance.return_value = MOCK_SECTORS
     mock_fmp.get_quote.side_effect = lambda sym: MOCK_QUOTES[sym]
     mock_fmp.get_historical_prices.side_effect = lambda sym, **kw: MOCK_HISTORICAL[sym]
@@ -80,7 +82,7 @@ def test_full_scan_pipeline(client):
         _setup_mock_fmp(mock_fmp)
 
         resp = client.post("/api/scan",
-                           data=json.dumps({"ath_min": 15, "ath_max": 50}),
+                           data=json.dumps({"ath_min": 10, "ath_max": 60}),
                            content_type="application/json")
 
         assert resp.status_code == 200

@@ -35,8 +35,8 @@ def create_app(testing=False):
             config = {
                 "market_cap_min": 1_000_000_000,
                 "volume_min": 500_000,
-                "ath_min": 15.0,
-                "ath_max": 50.0,
+                "ath_min": 10.0,
+                "ath_max": 60.0,
                 "top_n": 15,
             }
             if request.is_json and request.json:
