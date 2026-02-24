@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 from fmp_client import FMPClient
 from scanner import Scanner
 
-load_dotenv()
+load_dotenv(override=True)
 
 
 def create_app(testing=False):

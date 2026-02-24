@@ -1,3 +1,4 @@
+import time
 import requests
 from datetime import datetime, timedelta
 
@@ -10,15 +11,19 @@ class FMPClient:
         self.base_url = "https://financialmodelingprep.com/stable"
 
     def _get(self, endpoint: str, params: dict = None) -> dict | list:
-        """Make GET request to FMP stable API."""
+        """Make GET request to FMP stable API with retry on rate limit."""
         if params is None:
             params = {}
         params["apikey"] = self.api_key
 
-        resp = requests.get(f"{self.base_url}/{endpoint}", params=params, timeout=30)
-        if resp.status_code != 200:
-            raise Exception(f"FMP API error {resp.status_code}: {resp.text[:200]}")
-        return resp.json()
+        for attempt in range(3):
+            resp = requests.get(f"{self.base_url}/{endpoint}", params=params, timeout=30)
+            if resp.status_code == 429 and attempt < 2:
+                time.sleep(2 ** attempt)
+                continue
+            if resp.status_code != 200:
+                raise Exception(f"FMP API error {resp.status_code}: {resp.text[:200]}")
+            return resp.json()
 
     def get_sector_performance(self, date: str = None) -> list[dict]:
         """Get sector performance snapshot for a given date.

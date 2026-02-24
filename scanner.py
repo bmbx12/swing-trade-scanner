@@ -12,6 +12,11 @@ from scoring import (
     rank_stocks,
 )
 
+# FMP free tier = 250 API calls/day
+# Budget: 1 (sector perf) + ~60 (quotes) + ~20 (historical) = ~81 calls per scan
+MAX_SECTORS = 3
+MAX_CANDIDATES_PER_SECTOR = 20
+
 
 class Scanner:
     def __init__(self, client: FMPClient, config: dict = None):
@@ -23,9 +28,15 @@ class Scanner:
             "ath_max": 50.0,
             "top_n": 15,
         }
+        self._api_calls = 0
+
+    def _track_call(self):
+        """Track API call count for budget awareness."""
+        self._api_calls += 1
 
     def get_winning_sectors(self) -> list[dict]:
-        """Step 1: Get sectors outperforming the market."""
+        """Step 1: Get sectors outperforming the market (1 API call)."""
+        self._track_call()
         sectors = self.client.get_sector_performance()
         winning = [
             s for s in sectors
@@ -35,10 +46,11 @@ class Scanner:
             key=lambda s: float(s["changesPercentage"].replace("%", "")),
             reverse=True,
         )
-        return winning
+        # Limit to top sectors to conserve API budget
+        return winning[:MAX_SECTORS]
 
     def get_candidates(self, sectors: list[dict]) -> list[dict]:
-        """Step 2: Get stocks from embedded universe in winning sectors."""
+        """Step 2: Get stocks from embedded universe in winning sectors (0 API calls)."""
         candidates = []
         for sector_data in sectors:
             fmp_sector_name = sector_data["sector"]
@@ -46,7 +58,8 @@ class Scanner:
                 sector_data["changesPercentage"].replace("%", "")
             )
             stocks = get_stocks_by_sector(fmp_sector_name)
-            for stock in stocks:
+            # Limit per sector to stay within API budget
+            for stock in stocks[:MAX_CANDIDATES_PER_SECTOR]:
                 candidates.append({
                     "symbol": stock["symbol"],
                     "name": stock["name"],
@@ -56,13 +69,14 @@ class Scanner:
         return candidates
 
     def quick_filter(self, candidate: dict) -> dict | None:
-        """Step 3a: Quick filter using quote data (52-week high as ATH proxy).
+        """Step 3a: Quick filter using quote data (1 API call per stock).
 
         Returns enriched candidate if it passes initial screen, None otherwise.
-        This avoids expensive historical API calls for stocks that clearly
-        don't meet criteria.
+        Uses 52-week high as ATH proxy to avoid historical API calls for
+        stocks that clearly don't meet criteria.
         """
         symbol = candidate["symbol"]
+        self._track_call()
         quote = self.client.get_quote(symbol)
 
         price = quote.get("price", 0)
@@ -90,9 +104,10 @@ class Scanner:
         }
 
     def enrich_candidate(self, candidate: dict) -> dict | None:
-        """Step 3b: Add historical ATH data and score."""
+        """Step 3b: Add historical ATH data and score (1 API call per stock)."""
         symbol = candidate["symbol"]
 
+        self._track_call()
         historical = self.client.get_historical_prices(symbol, timeseries=365)
         hist_data = historical.get("historical", [])
         ath = calculate_ath(hist_data)
@@ -131,13 +146,16 @@ class Scanner:
         """Run the full screening pipeline.
 
         Pipeline:
-        1. Get sector performance -> find winning sectors
-        2. Get candidates from S&P 500 universe in winning sectors
-        3a. Quick filter: get quote, check 52-week range
-        3b. Deep enrich: get historical prices for ATH, score
+        1. Get sector performance -> find top 3 winning sectors (1 API call)
+        2. Get candidates from S&P 500 universe in winning sectors (0 API calls)
+        3a. Quick filter: get quote, check 52-week range (~60 API calls)
+        3b. Deep enrich: get historical prices for ATH, score (~20 API calls)
         4. Rank and return top N
+
+        Total budget: ~81 API calls per scan (well within 250/day free limit)
         """
         start_time = time.time()
+        self._api_calls = 0
 
         # Step 1: Sector performance
         if progress_callback:
@@ -147,7 +165,7 @@ class Scanner:
         # Step 2: Get candidates from universe
         if progress_callback:
             progress_callback(
-                f"Found {len(winning_sectors)} outperforming sectors, loading candidates..."
+                f"Found {len(winning_sectors)} top sectors, loading candidates..."
             )
         candidates = self.get_candidates(winning_sectors)
 
@@ -155,7 +173,7 @@ class Scanner:
         quick_passed = []
         total = len(candidates)
         for i, candidate in enumerate(candidates):
-            if progress_callback and i % 15 == 0:
+            if progress_callback and i % 10 == 0:
                 progress_callback(
                     f"Screening {i+1}/{total}: {candidate['symbol']}..."
                 )
@@ -207,6 +225,7 @@ class Scanner:
                 "total_candidates": len(candidates),
                 "quick_filtered": len(quick_passed),
                 "passed_filters": len(enriched),
+                "api_calls_used": self._api_calls,
                 "elapsed_seconds": elapsed,
             },
         }
