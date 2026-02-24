@@ -1,4 +1,1037 @@
 <!DOCTYPE html>
-<html><head><title>Swing Trade Scanner</title></head>
-<body><h1>Swing Trade Scanner</h1><p>UI coming next...</p></body>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Swing Trade Scanner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg-primary: #0a0e17;
+  --bg-secondary: #111827;
+  --bg-card: #1a2236;
+  --bg-card-hover: #1f2942;
+  --bg-elevated: #243049;
+  --border: #2a3654;
+  --border-bright: #3b4f73;
+  --text-primary: #e8ecf4;
+  --text-secondary: #8b9dc3;
+  --text-muted: #5a6d8f;
+  --accent-green: #22c55e;
+  --accent-green-dim: rgba(34,197,94,0.15);
+  --accent-red: #ef4444;
+  --accent-red-dim: rgba(239,68,68,0.12);
+  --accent-amber: #f59e0b;
+  --accent-amber-dim: rgba(245,158,11,0.12);
+  --accent-blue: #3b82f6;
+  --accent-blue-dim: rgba(59,130,246,0.12);
+  --accent-cyan: #06b6d4;
+  --conviction-high: #22c55e;
+  --conviction-mid: #f59e0b;
+  --conviction-low: #6b7280;
+  --font-display: 'DM Sans', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --radius: 10px;
+  --radius-sm: 6px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--font-display);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Background grain texture */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Ambient glow */
+body::after {
+  content: '';
+  position: fixed;
+  top: -40%;
+  right: -20%;
+  width: 60%;
+  height: 60%;
+  background: radial-gradient(ellipse, rgba(59,130,246,0.06) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.app { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; padding: 24px 32px 60px; }
+
+/* ── HEADER ── */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 0 28px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 28px;
+}
+
+.header-left { display: flex; align-items: center; gap: 16px; }
+
+.logo {
+  width: 42px;
+  height: 42px;
+  background: linear-gradient(135deg, var(--accent-blue), var(--accent-cyan));
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -1px;
+  box-shadow: 0 0 20px rgba(59,130,246,0.25);
+}
+
+.header-title h1 {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  line-height: 1.2;
+}
+
+.header-title .subtitle {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+
+.header-right { display: flex; align-items: center; gap: 12px; }
+
+.timestamp {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: right;
+  line-height: 1.6;
+}
+
+.api-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  background: var(--bg-card);
+  padding: 6px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+}
+
+.api-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-green);
+  box-shadow: 0 0 6px rgba(34,197,94,0.5);
+}
+.api-dot.inactive { background: var(--text-muted); box-shadow: none; }
+
+/* ── SCAN BUTTON ── */
+.scan-section { margin-bottom: 28px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+
+.scan-btn {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  padding: 14px 36px;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  color: #fff;
+  letter-spacing: -0.2px;
+  box-shadow: 0 4px 20px rgba(34,197,94,0.3), inset 0 1px 0 rgba(255,255,255,0.1);
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.scan-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 28px rgba(34,197,94,0.4), inset 0 1px 0 rgba(255,255,255,0.15);
+}
+
+.scan-btn:active:not(:disabled) { transform: translateY(0); }
+
+.scan-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.scan-btn.scanning {
+  background: linear-gradient(135deg, var(--accent-blue), var(--accent-cyan));
+  box-shadow: 0 4px 20px rgba(59,130,246,0.3);
+}
+
+.scan-btn .btn-text { position: relative; z-index: 1; }
+
+.scan-btn .scan-pulse {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
+  transform: translateX(-100%);
+  animation: pulse-sweep 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-sweep { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+
+.scan-progress {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--accent-cyan);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.scan-progress.visible { opacity: 1; }
+
+/* Settings toggle */
+.settings-toggle {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 10px 18px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-left: auto;
+}
+.settings-toggle:hover { border-color: var(--border-bright); color: var(--text-primary); }
+
+/* ── SETTINGS PANEL ── */
+.settings-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0;
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), padding 0.3s, margin 0.3s;
+  margin-bottom: 0;
+}
+
+.settings-panel.open {
+  max-height: 300px;
+  padding: 20px 24px;
+  margin-bottom: 28px;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px;
+}
+
+.setting-group label {
+  display: block;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin-bottom: 8px;
+}
+
+.setting-group input {
+  width: 100%;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  transition: border-color 0.2s;
+}
+
+.setting-group input:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
+}
+
+/* ── SECTOR BADGES ── */
+.sectors-bar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+  opacity: 0;
+  transition: opacity 0.4s;
+}
+.sectors-bar.visible { opacity: 1; }
+
+.sector-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  animation: fadeSlideIn 0.4s ease forwards;
+  opacity: 0;
+}
+
+.sector-badge .perf {
+  font-weight: 600;
+  color: var(--accent-green);
+}
+
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── METADATA BAR ── */
+.meta-bar {
+  display: flex;
+  gap: 24px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 20px;
+  opacity: 0;
+  transition: opacity 0.4s;
+}
+.meta-bar.visible { opacity: 1; }
+
+.meta-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.meta-label {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.meta-value {
+  font-size: 14px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* ── RESULTS TABLE ── */
+.results-container {
+  opacity: 0;
+  transform: translateY(12px);
+  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.results-container.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.table-wrapper {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.results-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.results-table thead th {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-muted);
+  padding: 14px 16px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-secondary);
+  position: sticky;
+  top: 0;
+  white-space: nowrap;
+}
+
+.results-table thead th.num { text-align: right; }
+.results-table thead th.center { text-align: center; }
+
+.results-table tbody tr {
+  border-bottom: 1px solid rgba(42,54,84,0.5);
+  transition: background 0.15s;
+  cursor: pointer;
+  animation: rowSlideIn 0.3s ease forwards;
+  opacity: 0;
+}
+
+.results-table tbody tr:hover { background: var(--bg-card-hover); }
+
+.results-table tbody tr:last-child { border-bottom: none; }
+
+@keyframes rowSlideIn {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.results-table td {
+  padding: 14px 16px;
+  vertical-align: middle;
+}
+
+.results-table td.num {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+/* Rank badge */
+.rank-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.rank-badge.high {
+  background: var(--accent-green-dim);
+  color: var(--accent-green);
+  border: 1px solid rgba(34,197,94,0.3);
+}
+
+.rank-badge.mid {
+  background: var(--accent-amber-dim);
+  color: var(--accent-amber);
+  border: 1px solid rgba(245,158,11,0.3);
+}
+
+.rank-badge.low {
+  background: rgba(107,114,128,0.15);
+  color: var(--text-muted);
+  border: 1px solid rgba(107,114,128,0.3);
+}
+
+/* Stock name cell */
+.stock-cell { display: flex; flex-direction: column; gap: 2px; }
+.stock-ticker {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: 0.5px;
+}
+.stock-name {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+}
+
+/* Sector cell */
+.sector-tag {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  background: var(--bg-elevated);
+  padding: 3px 10px;
+  border-radius: 4px;
+  display: inline-block;
+  white-space: nowrap;
+}
+
+/* Green/red values */
+.val-green { color: var(--accent-green); }
+.val-red { color: var(--accent-red); }
+.val-amber { color: var(--accent-amber); }
+
+/* Conviction bar */
+.conviction-cell { display: flex; align-items: center; gap: 10px; min-width: 130px; }
+
+.conviction-bar-track {
+  flex: 1;
+  height: 6px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 3px;
+  overflow: hidden;
+  position: relative;
+}
+
+.conviction-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+}
+
+.conviction-bar-fill::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: -1px;
+  width: 2px;
+  height: 8px;
+  background: inherit;
+  border-radius: 1px;
+  box-shadow: 0 0 6px currentColor;
+}
+
+.conviction-value {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 13px;
+  min-width: 32px;
+  text-align: right;
+}
+
+/* ── EXPANDED ROW DETAIL ── */
+.row-detail {
+  display: none;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+}
+
+.row-detail.open { display: table-row; }
+
+.detail-content {
+  padding: 16px 24px 20px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 16px;
+}
+
+.detail-item label {
+  display: block;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin-bottom: 4px;
+}
+
+.detail-item .value {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+/* 52-week range bar */
+.range-bar-container { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+
+.range-bar {
+  flex: 1;
+  height: 4px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 2px;
+  position: relative;
+}
+
+.range-bar-marker {
+  position: absolute;
+  top: -4px;
+  width: 3px;
+  height: 12px;
+  background: var(--accent-cyan);
+  border-radius: 2px;
+  box-shadow: 0 0 6px rgba(6,182,212,0.5);
+  transition: left 0.5s ease;
+}
+
+.range-labels {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+/* ── DOWNLOAD BAR ── */
+.download-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 20px;
+  padding: 16px 0;
+  opacity: 0;
+  transition: opacity 0.4s;
+}
+.download-bar.visible { opacity: 1; }
+
+.download-btn {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 10px 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.download-btn:hover {
+  border-color: var(--accent-blue);
+  color: var(--text-primary);
+  background: var(--bg-card-hover);
+}
+
+.results-count {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ── ERROR STATE ── */
+.error-message {
+  background: var(--accent-red-dim);
+  border: 1px solid rgba(239,68,68,0.3);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  margin-bottom: 20px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--accent-red);
+  display: none;
+}
+.error-message.visible { display: block; }
+
+/* ── EMPTY STATE ── */
+.empty-state {
+  text-align: center;
+  padding: 80px 40px;
+  color: var(--text-muted);
+}
+
+.empty-state .icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  opacity: 0.3;
+}
+
+.empty-state h3 {
+  font-size: 18px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.empty-state p {
+  font-size: 13px;
+  max-width: 400px;
+  margin: 0 auto;
+  line-height: 1.6;
+}
+
+/* ── LOADING SKELETON ── */
+.skeleton-row {
+  display: grid;
+  grid-template-columns: 40px 1fr 80px 80px 80px 80px 120px;
+  gap: 16px;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(42,54,84,0.3);
+}
+
+.skeleton-block {
+  height: 14px;
+  background: linear-gradient(90deg, var(--bg-elevated) 25%, var(--bg-card-hover) 50%, var(--bg-elevated) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: 4px;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── RESPONSIVE ── */
+@media (max-width: 900px) {
+  .app { padding: 16px; }
+  .header { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .header-right { width: 100%; justify-content: flex-start; }
+  .table-wrapper { overflow-x: auto; }
+  .results-table { min-width: 900px; }
+  .meta-bar { flex-wrap: wrap; gap: 16px; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- HEADER -->
+  <header class="header">
+    <div class="header-left">
+      <div class="logo">ST</div>
+      <div class="header-title">
+        <h1>Swing Trade Scanner</h1>
+        <div class="subtitle">Market Screening Engine</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="timestamp" id="lastRunTime">No scans yet</div>
+      <div class="api-status">
+        <span class="api-dot inactive" id="apiDot"></span>
+        <span id="apiLabel">API Ready</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- SCAN CONTROLS -->
+  <div class="scan-section">
+    <button class="scan-btn" id="scanBtn" onclick="runScan()">
+      <span class="btn-text">Run Scan</span>
+    </button>
+    <span class="scan-progress" id="scanProgress"></span>
+    <button class="settings-toggle" id="settingsToggle" onclick="toggleSettings()">Settings</button>
+  </div>
+
+  <!-- SETTINGS -->
+  <div class="settings-panel" id="settingsPanel">
+    <div class="settings-grid">
+      <div class="setting-group">
+        <label>Min Market Cap ($)</label>
+        <input type="number" id="settingMarketCap" value="1000000000" step="100000000">
+      </div>
+      <div class="setting-group">
+        <label>Min Volume</label>
+        <input type="number" id="settingVolume" value="500000" step="100000">
+      </div>
+      <div class="setting-group">
+        <label>ATH Distance Min (%)</label>
+        <input type="number" id="settingAthMin" value="15" min="0" max="100">
+      </div>
+      <div class="setting-group">
+        <label>ATH Distance Max (%)</label>
+        <input type="number" id="settingAthMax" value="50" min="0" max="100">
+      </div>
+      <div class="setting-group">
+        <label>Top N Results</label>
+        <input type="number" id="settingTopN" value="15" min="1" max="50">
+      </div>
+    </div>
+  </div>
+
+  <!-- ERROR -->
+  <div class="error-message" id="errorMsg"></div>
+
+  <!-- SECTOR BADGES -->
+  <div class="sectors-bar" id="sectorsBar"></div>
+
+  <!-- METADATA BAR -->
+  <div class="meta-bar" id="metaBar">
+    <div class="meta-item">
+      <span class="meta-label">Candidates</span>
+      <span class="meta-value" id="metaCandidates">—</span>
+    </div>
+    <div class="meta-item">
+      <span class="meta-label">Passed Filters</span>
+      <span class="meta-value" id="metaPassed">—</span>
+    </div>
+    <div class="meta-item">
+      <span class="meta-label">Scan Time</span>
+      <span class="meta-value" id="metaTime">—</span>
+    </div>
+  </div>
+
+  <!-- RESULTS -->
+  <div class="results-container" id="resultsContainer">
+    <div id="resultsArea">
+      <div class="empty-state">
+        <div class="icon">&#x25CE;</div>
+        <h3>Ready to Scan</h3>
+        <p>Click <strong>Run Scan</strong> to screen the market for swing trade candidates across outperforming sectors.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- DOWNLOAD BAR -->
+  <div class="download-bar" id="downloadBar">
+    <div class="results-count" id="resultsCount"></div>
+    <a class="download-btn" id="csvBtn" href="/api/csv" style="display:none;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Download CSV
+    </a>
+  </div>
+
+</div>
+
+<script>
+let scanData = null;
+
+function toggleSettings() {
+  document.getElementById('settingsPanel').classList.toggle('open');
+}
+
+function showError(msg) {
+  const el = document.getElementById('errorMsg');
+  el.textContent = msg;
+  el.classList.add('visible');
+  setTimeout(() => el.classList.remove('visible'), 8000);
+}
+
+function showProgress(msg) {
+  const el = document.getElementById('scanProgress');
+  el.textContent = msg;
+  el.classList.add('visible');
+}
+
+function hideProgress() {
+  document.getElementById('scanProgress').classList.remove('visible');
+}
+
+function showLoading() {
+  const area = document.getElementById('resultsArea');
+  let skeletons = '<div class="table-wrapper"><table class="results-table"><thead><tr>';
+  skeletons += '<th>#</th><th>Stock</th><th>Sector</th><th class="num">Price</th><th class="num">ATH</th><th class="num">% Below</th><th class="num">Upside</th><th>Conviction</th>';
+  skeletons += '</tr></thead><tbody>';
+  for (let i = 0; i < 8; i++) {
+    skeletons += '<tr><td colspan="8"><div class="skeleton-row">';
+    skeletons += '<div class="skeleton-block" style="width:28px;height:28px;border-radius:50%"></div>';
+    skeletons += '<div class="skeleton-block" style="height:16px"></div>';
+    skeletons += '<div class="skeleton-block" style="height:14px"></div>';
+    skeletons += '<div class="skeleton-block" style="height:14px"></div>';
+    skeletons += '<div class="skeleton-block" style="height:14px"></div>';
+    skeletons += '<div class="skeleton-block" style="height:14px"></div>';
+    skeletons += '<div class="skeleton-block" style="height:14px"></div>';
+    skeletons += '</div></td></tr>';
+  }
+  skeletons += '</tbody></table></div>';
+  area.innerHTML = skeletons;
+}
+
+function getConvictionClass(score) {
+  if (score >= 60) return 'high';
+  if (score >= 40) return 'mid';
+  return 'low';
+}
+
+function getConvictionColor(score) {
+  if (score >= 60) return 'var(--conviction-high)';
+  if (score >= 40) return 'var(--conviction-mid)';
+  return 'var(--conviction-low)';
+}
+
+function formatMoney(val) {
+  if (val == null) return '—';
+  return '$' + Number(val).toFixed(2);
+}
+
+function formatPct(val) {
+  if (val == null) return '—';
+  return Number(val).toFixed(1) + '%';
+}
+
+function renderSectors(sectors) {
+  const bar = document.getElementById('sectorsBar');
+  bar.innerHTML = '';
+  sectors.forEach((s, i) => {
+    const badge = document.createElement('span');
+    badge.className = 'sector-badge';
+    badge.style.animationDelay = (i * 0.08) + 's';
+    badge.innerHTML = s.name + ' <span class="perf">+' + s.performance.toFixed(1) + '%</span>';
+    bar.appendChild(badge);
+  });
+  bar.classList.add('visible');
+}
+
+function renderResults(data) {
+  scanData = data;
+  const stocks = data.stocks;
+  const meta = data.scan_metadata;
+
+  // Update metadata
+  document.getElementById('metaCandidates').textContent = meta.total_candidates;
+  document.getElementById('metaPassed').textContent = meta.passed_filters;
+  document.getElementById('metaTime').textContent = meta.elapsed_seconds + 's';
+  document.getElementById('metaBar').classList.add('visible');
+
+  // Render sectors
+  if (meta.winning_sectors) {
+    renderSectors(meta.winning_sectors);
+  }
+
+  // Update timestamp
+  const now = new Date();
+  document.getElementById('lastRunTime').innerHTML =
+    'Last scan<br>' + now.toLocaleDateString() + ' ' + now.toLocaleTimeString();
+  localStorage.setItem('lastScanTime', now.toISOString());
+
+  // API dot active
+  document.getElementById('apiDot').classList.remove('inactive');
+
+  if (!stocks || stocks.length === 0) {
+    document.getElementById('resultsArea').innerHTML =
+      '<div class="empty-state"><div class="icon">&#x2205;</div><h3>No Matches Found</h3><p>No stocks matched the current filter criteria. Try widening the ATH distance range in Settings.</p></div>';
+    return;
+  }
+
+  // Build table
+  let html = '<div class="table-wrapper"><table class="results-table">';
+  html += '<thead><tr>';
+  html += '<th class="center">#</th>';
+  html += '<th>Stock</th>';
+  html += '<th>Sector</th>';
+  html += '<th class="num">Price</th>';
+  html += '<th class="num">Target (ATH)</th>';
+  html += '<th class="num">% Below ATH</th>';
+  html += '<th class="num">Upside</th>';
+  html += '<th>Conviction</th>';
+  html += '</tr></thead><tbody>';
+
+  stocks.forEach((s, idx) => {
+    const cc = getConvictionClass(s.score);
+    const color = getConvictionColor(s.score);
+    const delay = (idx * 0.05) + 's';
+
+    // Main row
+    html += '<tr style="animation-delay:' + delay + '" onclick="toggleDetail(\'detail-' + idx + '\')">';
+    html += '<td class="center"><span class="rank-badge ' + cc + '">' + s.rank + '</span></td>';
+    html += '<td><div class="stock-cell"><span class="stock-ticker">' + s.symbol + '</span><span class="stock-name">' + (s.name || '') + '</span></div></td>';
+    html += '<td><span class="sector-tag">' + (s.sector || '') + '</span></td>';
+    html += '<td class="num">' + formatMoney(s.price) + '</td>';
+    html += '<td class="num">' + formatMoney(s.target_price) + '</td>';
+    html += '<td class="num"><span class="val-red">' + formatPct(s.pct_below_ath) + '</span></td>';
+    html += '<td class="num"><span class="val-green">+' + formatPct(s.upside_pct) + '</span></td>';
+    html += '<td><div class="conviction-cell">';
+    html += '<div class="conviction-bar-track"><div class="conviction-bar-fill" style="width:' + s.score + '%;background:' + color + ';color:' + color + '"></div></div>';
+    html += '<span class="conviction-value" style="color:' + color + '">' + s.score + '</span>';
+    html += '</div></td>';
+    html += '</tr>';
+
+    // Detail row
+    const yearRange = (s.yearHigh || 1) - (s.yearLow || 0);
+    const pricePct = yearRange > 0 ? ((s.price - (s.yearLow || 0)) / yearRange) * 100 : 50;
+    const volRatio = s.avgVolume > 0 ? (s.volume / s.avgVolume).toFixed(2) : '—';
+    const volColor = volRatio > 1.2 ? 'val-green' : (volRatio < 0.8 ? 'val-red' : '');
+
+    html += '<tr class="row-detail" id="detail-' + idx + '"><td colspan="8"><div class="detail-content">';
+    html += '<div class="detail-item"><label>52-Week High</label><div class="value">' + formatMoney(s.yearHigh) + '</div></div>';
+    html += '<div class="detail-item"><label>52-Week Low</label><div class="value">' + formatMoney(s.yearLow) + '</div></div>';
+    html += '<div class="detail-item"><label>All-Time High</label><div class="value">' + formatMoney(s.ath) + '</div></div>';
+    html += '<div class="detail-item"><label>Volume / Avg</label><div class="value"><span class="' + volColor + '">' + volRatio + 'x</span></div></div>';
+    html += '<div class="detail-item"><label>Sector Performance</label><div class="value val-green">+' + formatPct(s.sector_performance) + '</div></div>';
+    html += '<div class="detail-item" style="grid-column: span 2"><label>52-Week Range</label>';
+    html += '<div class="range-bar-container"><span style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted)">' + formatMoney(s.yearLow) + '</span>';
+    html += '<div class="range-bar"><div class="range-bar-marker" style="left:' + pricePct + '%"></div></div>';
+    html += '<span style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted)">' + formatMoney(s.yearHigh) + '</span></div>';
+    html += '</div>';
+    html += '</div></td></tr>';
+  });
+
+  html += '</tbody></table></div>';
+  document.getElementById('resultsArea').innerHTML = html;
+
+  // Show results container
+  document.getElementById('resultsContainer').classList.add('visible');
+
+  // Show download bar
+  document.getElementById('resultsCount').textContent = stocks.length + ' stocks matched';
+  document.getElementById('csvBtn').style.display = 'inline-flex';
+  document.getElementById('downloadBar').classList.add('visible');
+}
+
+function toggleDetail(id) {
+  document.getElementById(id).classList.toggle('open');
+}
+
+async function runScan() {
+  const btn = document.getElementById('scanBtn');
+  btn.disabled = true;
+  btn.classList.add('scanning');
+  btn.innerHTML = '<span class="scan-pulse"></span><span class="btn-text">Scanning...</span>';
+
+  showProgress('Connecting to FMP API...');
+  showLoading();
+
+  // Hide previous error
+  document.getElementById('errorMsg').classList.remove('visible');
+
+  // Gather settings
+  const config = {
+    market_cap_min: parseInt(document.getElementById('settingMarketCap').value) || 1000000000,
+    volume_min: parseInt(document.getElementById('settingVolume').value) || 500000,
+    ath_min: parseFloat(document.getElementById('settingAthMin').value) || 15,
+    ath_max: parseFloat(document.getElementById('settingAthMax').value) || 50,
+    top_n: parseInt(document.getElementById('settingTopN').value) || 15,
+  };
+
+  try {
+    showProgress('Analyzing sectors & screening stocks...');
+
+    const resp = await fetch('/api/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config),
+    });
+
+    const data = await resp.json();
+
+    if (!resp.ok) {
+      throw new Error(data.error || 'Scan failed');
+    }
+
+    showProgress('Rendering results...');
+    setTimeout(() => {
+      renderResults(data);
+      hideProgress();
+    }, 300);
+
+  } catch (err) {
+    showError(err.message);
+    hideProgress();
+    document.getElementById('resultsArea').innerHTML =
+      '<div class="empty-state"><div class="icon">&#x26A0;</div><h3>Scan Failed</h3><p>' + err.message + '</p></div>';
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove('scanning');
+    btn.innerHTML = '<span class="btn-text">Run Scan</span>';
+  }
+}
+
+// Restore last scan time from localStorage
+const lastScan = localStorage.getItem('lastScanTime');
+if (lastScan) {
+  const d = new Date(lastScan);
+  document.getElementById('lastRunTime').innerHTML =
+    'Last scan<br>' + d.toLocaleDateString() + ' ' + d.toLocaleTimeString();
+}
+</script>
+</body>
 </html>
